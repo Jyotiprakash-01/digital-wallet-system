@@ -1,0 +1,19 @@
+curl -X POST http://localhost:5000/register -H "Content-Type: application/json" -d "{\"username\":\"john\",\"password\":\"secure12\"}"
+
+
+curl -X POST http://localhost:5000/product -u john:secure123 -H "Content-Type: application/json"-d "{\"name\":\"Gaming Keyboard\",\"price\":79.99,\"description\":\"RGB mechanical keyboard\"}"
+
+curl -X GET http://localhost:5000/product
+curl -u john:secure123 "http://localhost:5000/bal?currency=USD"
+curl -u john:secure123 "http://localhost:5000/bal?currency=EUR"
+
+
+curl -X POST http://localhost:5000/register -H "Content-Type: application/json" -d "{\"username\":\"alice\",\"password\":\"alice123\"}"
+
+curl -X GET http://localhost:5000/stmt -u john:secure123
+
+curl -X GET http://localhost:5000/pay -u john:secure123 -H "Content-Type: application/json"
+
+curl -X POST http://localhost:5000/fund -u john:secure123 -H "Content-Type: application/json" -d "{\"amt\": 100.0}
+
+curl -X POST http://localhost:5000/buy -u john:secure123 -H "Content-Type: application/json" -d "{\"product_id\": 1}"

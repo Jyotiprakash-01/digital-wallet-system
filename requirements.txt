@@ -1,0 +1,1 @@
+decimal requests base64 flask request jsonify dotenv flask_sqlalchemy flask_bcrypt datetime

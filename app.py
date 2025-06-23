@@ -1,7 +1,8 @@
 from decimal import Decimal
 import os
 import base64
-from flask import Flask,request,jsonify,redirect,url_for
+import requests
+from flask import Flask,request,jsonify
 from dotenv import load_dotenv
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
@@ -15,6 +16,8 @@ db_username=os.environ['db_username']
 db_password=os.environ['db_password']
 db_name=os.environ['db_name']
 api_key=os.environ['api_key']
+
+EXCHANGE_API_URL="https://api.currencyapi.com/v3/latest?apikey=cur_live_Tws4DFUCPSQHb0aEhsfUq60q4Mk1bMm4e0ktlhck&currencies=INR%2CUSD%2CEUR"
 app.config['SQLALCHEMY_DATABASE_URI']="mysql+pymysql://{db_username}:{db_password}@{db_host}/{db_name}".format(db_username=db_username,db_password=db_password,db_host=db_host,db_name=db_name)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS']=False
 
@@ -270,7 +273,6 @@ def transaction_history():
 
 
     if userValidated:
-        pass
         try:
             result=[]
             transactions=TransactionHistory.query.filter_by(user_id=userid).all()
@@ -305,9 +307,108 @@ def getProduct():
         return jsonify(catalog),200
     except Exception as e:
         return jsonify({"mssg":"Internal Server Error Could not Fetch products"}),500
-app.route('/buy',methods=['POST'])
+    
+@app.route('/buy',methods=['POST'])
 def buyProduct():
+   
+    header=request.headers.get('Authorization')
+    try:
+        auth=authenticateUser(header)
+        if isinstance(auth, tuple):
+            response_obj, status_code = auth
+            
+        else:
+            response_obj = auth
+            status_code = 200
+        response=response_obj.get_json()
+        # print(response)
+        userValidated=response.get('status')
+        validationMssg=response.get('mssg')
+        userid=response.get('User')
+        print("st",userid)
+    except Exception as e:
+        return jsonify({"mssg":"User not Authenticated", "reason":validationMssg}),status_code 
+    # print(validationMssg)
 
+
+    if userValidated:
+        try:
+            data=requests.get_json()
+            pid=data.get('product_id')
+            try:
+                buyingUser=User.query.filter_by(user_id=userid).first()
+                product=Product.query.filter_by(product_id=pid).first()
+            except Exception as e:
+                return jsonify({"mssg":"No such Product found"}),400
+
+            if((buyingUser.user_balance-product.price)<0):
+                return jsonify({"mssg":"insufficient funds or recipient doesnot exist."}),400
+            
+            buyingUser.user_balance-=product.price
+            t=TransactionHistory(user_id=buyingUser.user_id,kind="debit",amt=product.price,updated_bal=buyingUser.user_balance)
+            db.session.add(t)
+            db.session.commit()
+            return jsonify({"message":"Product Purchased","balance":buyingUser.user_balance}),200
+        except Exception as e:
+            db.session.rollback()
+            print(str(e))
+            return jsonify({"mssg":"Transaction Failed"}),400
+    else:
+        return jsonify({"mssg":"User not Authenticated", "reason":validationMssg}),401
+    
+
+
+@app.route('/bal',methods=['GET'])
+def checkBalanceInUsd():
+    header=request.headers.get('Authorization')
+    try:
+        auth=authenticateUser(header)
+        if isinstance(auth, tuple):
+            response_obj, status_code = auth
+            
+        else:
+            response_obj = auth
+            status_code = 200
+        response=response_obj.get_json()
+        # print(response)
+        userValidated=response.get('status')
+        validationMssg=response.get('mssg')
+        userid=response.get('User')
+        print("st",userid)
+    except Exception as e:
+        return jsonify({"mssg":"User not Authenticated", "reason":validationMssg}),status_code 
+    # print(validationMssg)
+
+
+    if userValidated:
+        try:
+           
+            currency=request.args.get('currency','USD').upper()
+            try:
+                response=requests.get(EXCHANGE_API_URL)
+                currencyData=response.json()
+                # print("Hi 1")
+                if response.status_code !=200 :
+                    return jsonify({"mssg":"Failed to fetch exchange rates"}),502
+            except Exception as e:
+                print(str(e))
+                return jsonify({"mssg":"Internal Server Error"}),500
+            # print("Hi 2")
+            rate=currencyData['data'].get(currency,{}).get('value')
+            user=User.query.filter_by(user_id=userid).first()
+            result={}
+            result["balance"]=user.user_balance*Decimal(str(rate))
+            result["currency"]=currency
+            # print("Hi 3")
+            return jsonify(result),200
+        except Exception as e:
+                print(str(e))
+                return jsonify({"mssg":"Conversion Failed"}),500
+    else:
+        return jsonify({"mssg":"User not Authenticated", "reason":validationMssg}),502
+            
+
+                
 @app.route('/')
 def retString():
     return "Hello"
